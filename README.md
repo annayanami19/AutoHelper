@@ -5,6 +5,19 @@ Fungsinya untuk **menyalin HTML bersih** dari elemen tertentu dan **mengambil sc
 
 ---
 
+## 🚀 Instalasi
+
+1. **Pasang Tampermonkey Extension**
+   - Chrome / Edge: [Tampermonkey Web Store](https://tampermonkey.net/?ext=dhdg)
+   - Firefox: [Tampermonkey for Firefox](https://www.tampermonkey.net/index.php?browser=firefox)
+     
+2. **Tambahkan Script**
+   - Buka dashboard Tampermonkey → **Add New Script**
+   - Tempel seluruh isi file 
+   - Klik **Save**
+
+---
+
 ## 🚀 Fitur Utama
 
 ### 📋 1. Copy HTML
