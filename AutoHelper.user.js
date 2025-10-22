@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         🙂AutoHelper
 // @namespace    http://tampermonkey.net/
-// @version      0.1
+// @version      0.2
 // @description  Salin HTML & screenshot full halaman (clipboard / file) dengan timestamp otomatis + lint clean + GUI draggable + auto-hide + captcha safe
 // @author       annayanami19
 // @match        *://*/*
@@ -13,7 +13,7 @@
 
 (function () {
   'use strict';
-  if (window.top !== window.self) return;
+  if (window.top !== window.self) return; // biar tidak aktif di iframe
 
   const UPDATE_DELAY = 200;
   const PRESETS = { full: 'html', body: 'body', custom: '' };
@@ -53,9 +53,7 @@
     clone.querySelectorAll('#copyHtmlGui, #copyHtmlReopenBtn').forEach(e => e.remove());
     clone.querySelectorAll('script').forEach(scr => {
       const txt = scr.textContent || '';
-      const isTamper =
-        txt.includes('AutoHelper') ||
-        txt.includes('Tampermonkey');
+      const isTamper = txt.includes('AutoHelper') || txt.includes('Tampermonkey');
       if (isTamper || (scr.src && scr.src.includes('tampermonkey'))) scr.remove();
     });
     if (removeAllScripts) clone.querySelectorAll('script').forEach(scr => scr.remove());
@@ -92,25 +90,72 @@
     }
   }
 
-  function showStatus(msg, ms = 1800) {
-    statusText.textContent = msg;
-    setTimeout(() => {
-      statusText.textContent = '';
-    }, ms);
-  }
-
   // === GUI ===
   const panel = document.createElement('div');
   panel.id = 'copyHtmlGui';
   panel.innerHTML = `
-  <div style="position:fixed;bottom:20px;right:20px;background:white;border:1px solid #ccc;
-    box-shadow:0 4px 10px rgba(0,0,0,0.25);border-radius:10px;font-family:sans-serif;
-    z-index:999999999;width:270px;transition:all 0.2s ease;">
-    <div id="headerBar" style="background:#0b74de;color:white;padding:10px;cursor:move;font-weight:bold;
-      display:flex;justify-content:space-between;align-items:center;">
+  <div id="panelContainer" style="all:revert; position:fixed; bottom:20px; right:20px;
+    background:#fff; border:1px solid #ccc;
+    box-shadow:0 4px 10px rgba(0,0,0,0.25);
+    border-radius:10px; font-family:system-ui, sans-serif;
+    z-index:999999999; width:270px; line-height:1.4;
+    font-size:14px; color:#222;
+    transition:all 0.2s ease; overflow:hidden;">
+    <style>
+      #copyHtmlGui * {
+        all: revert;
+        box-sizing: border-box !important;
+        font-family: system-ui, sans-serif !important;
+        font-size: 14px !important;
+        line-height: 1.4 !important;
+      }
+      #copyHtmlGui button {
+        display:block;
+        width:100%;
+        padding:8px;
+        border:none;
+        border-radius:6px;
+        cursor:pointer;
+        font-weight:600;
+        transition:filter 0.15s;
+      }
+      #copyHtmlGui button:hover { filter:brightness(0.9); }
+      #copyHtmlGui #closeBtn:hover {
+        background: rgba(255,255,255,0.15);
+      }
+    </style>
+    <div id="headerBar" style="
+  background:#0b74de;
+  color:white;
+  padding:10px 14px 10px 12px;
+  cursor:move;
+  font-weight:bold;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  position:relative;">
       <span>AutoHelper</span>
-      <button id="closeBtn" title="Close" style="background:none;border:none;color:white;
-        font-weight:bold;font-size:16px;cursor:pointer;">×</button>
+      <button id="closeBtn" title="Close" style="
+  all:unset;
+  position:absolute;
+  top:50%;
+  right:10px;
+  transform:translateY(-50%);
+  color:white;
+  font-weight:700;
+  font-size:18px;
+  cursor:pointer;
+  line-height:1;
+  width:22px;
+  height:22px;
+  text-align:center;
+  border-radius:4px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transition:background 0.15s;">
+  ×
+</button>
     </div>
     <div id="panelContent" style="padding:10px;">
       <label style="font-size:13px;">Target:</label><br>
@@ -128,16 +173,13 @@
         Hapus semua &lt;script&gt;
       </label>
 
-      <button id="copyBtn" style="margin-top:10px;width:100%;padding:8px;background:#0b74de;color:white;
-        border:none;border-radius:5px;cursor:pointer;">📋 Copy HTML</button>
+      <button id="copyBtn" style="background:#0b74de;color:white;margin-top:10px;">📋 Copy HTML</button>
 
       <hr style="margin:10px 0;border:none;border-top:1px solid #ccc;">
 
-      <button id="screenshotBtn" style="margin-top:6px;width:100%;padding:8px;background:#009f4d;color:white;
-        border:none;border-radius:5px;cursor:pointer;">📸 Screenshot (Download)</button>
+      <button id="screenshotBtn" style="background:#009f4d;color:white;">📸 Screenshot (Download)</button>
 
-      <button id="copyShotBtn" style="margin-top:6px;width:100%;padding:8px;background:#ff9800;color:white;
-        border:none;border-radius:5px;cursor:pointer;">🖼️ Copy Screenshot to Clipboard</button>
+      <button id="copyShotBtn" style="background:#ff9800;color:white;margin-top:6px;">🖼️ Copy Screenshot to Clipboard</button>
 
       <div id="statusText" style="font-size:12px;margin-top:8px;color:#333;text-align:center;"></div>
     </div>
@@ -161,11 +203,11 @@
     cursor: 'pointer',
     boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
     display: 'none',
-    fontFamily: 'sans-serif'
+    fontFamily: 'system-ui, sans-serif'
   });
   document.body.appendChild(reopenBtn);
 
-  const panelContainer = panel.querySelector('div');
+  const panelContainer = panel.querySelector('#panelContainer');
   const headerBar = panel.querySelector('#headerBar');
   const presetSelect = panel.querySelector('#presetSelect');
   const selectorInput = panel.querySelector('#selectorInput');
@@ -175,6 +217,13 @@
   const statusText = panel.querySelector('#statusText');
   const removeScriptsChk = panel.querySelector('#removeScriptsChk');
   const closeBtn = panel.querySelector('#closeBtn');
+
+  function showStatus(msg, ms = 1800) {
+    statusText.textContent = msg;
+    setTimeout(() => {
+      statusText.textContent = '';
+    }, ms);
+  }
 
   // === Drag ===
   (function makeDraggable() {
@@ -200,7 +249,7 @@
     }
   })();
 
-  // === Close ===
+  // === Close & Reopen ===
   closeBtn.addEventListener('click', () => {
     panelContainer.style.display = 'none';
     reopenBtn.style.display = 'block';
