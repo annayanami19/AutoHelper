@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         🙂AutoHelper
 // @namespace    http://tampermonkey.net/
-// @version      0.2
-// @description  Salin HTML & screenshot full halaman (clipboard / file) dengan timestamp otomatis + lint clean + GUI draggable + auto-hide + captcha safe
+// @version      0.3
+// @description  Salin HTML & screenshot full halaman (clipboard/file) — fix teks field terpotong, tanpa duplikasi textarea, full-page capture stabil
 // @author       annayanami19
 // @match        *://*/*
 // @grant        none
@@ -13,7 +13,7 @@
 
 (function () {
   'use strict';
-  if (window.top !== window.self) return; // biar tidak aktif di iframe
+  if (window.top !== window.self) return;
 
   const UPDATE_DELAY = 200;
   const PRESETS = { full: 'html', body: 'body', custom: '' };
@@ -22,31 +22,25 @@
   let latestHtml = '';
   let removeAllScripts = false;
 
-  function debounce(fn, wait) {
+  const debounce = (fn, wait) => {
     let t;
     return (...args) => {
       clearTimeout(t);
       t = setTimeout(() => fn.apply(this, args), wait);
     };
-  }
+  };
 
-  function getTimestamp() {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
-      now.getDate()
-    ).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(
-      now.getMinutes()
-    ).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}`;
-  }
+  const getTimestamp = () => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}_${String(n.getHours()).padStart(2, '0')}-${String(n.getMinutes()).padStart(2, '0')}-${String(n.getSeconds()).padStart(2, '0')}`;
+  };
 
-  function getTarget() {
-    if (targetSelector.toLowerCase() === 'html' || targetSelector.toLowerCase() === 'document') {
-      return document.documentElement;
-    }
-    return document.querySelector(targetSelector);
-  }
+  const getTarget = () =>
+    targetSelector.toLowerCase() === 'html' || targetSelector.toLowerCase() === 'document'
+      ? document.documentElement
+      : document.querySelector(targetSelector);
 
-  function getHtmlClean() {
+  const getHtmlClean = () => {
     const el = getTarget();
     if (!el) return '';
     const clone = el.cloneNode(true);
@@ -61,26 +55,25 @@
       if (st.textContent.includes('#copyHtmlGui')) st.remove();
     });
     return clone.outerHTML;
-  }
+  };
 
-  async function copyToClipboard(text) {
+  const copyToClipboard = async text => {
     try {
       await navigator.clipboard.writeText(text);
-      return true;
     } catch {
       const ta = document.createElement('textarea');
       ta.value = text;
       document.body.appendChild(ta);
       ta.select();
       document.execCommand('copy');
-      document.body.removeChild(ta);
-      return true;
+      ta.remove();
     }
-  }
+    return true;
+  };
 
-  async function copyImageToClipboard(canvas) {
+  const copyImageToClipboard = async canvas => {
     try {
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
       const item = new ClipboardItem({ 'image/png': blob });
       await navigator.clipboard.write([item]);
       return true;
@@ -88,74 +81,26 @@
       console.error('Clipboard image copy failed:', e);
       return false;
     }
-  }
+  };
 
-  // === GUI ===
+  // GUI panel
   const panel = document.createElement('div');
   panel.id = 'copyHtmlGui';
   panel.innerHTML = `
   <div id="panelContainer" style="all:revert; position:fixed; bottom:20px; right:20px;
-    background:#fff; border:1px solid #ccc;
-    box-shadow:0 4px 10px rgba(0,0,0,0.25);
-    border-radius:10px; font-family:system-ui, sans-serif;
+    background:#fff; border:1px solid #ccc; box-shadow:0 4px 10px rgba(0,0,0,0.25);
+    border-radius:10px; font-family:system-ui,sans-serif;
     z-index:999999999; width:270px; line-height:1.4;
-    font-size:14px; color:#222;
-    transition:all 0.2s ease; overflow:hidden;">
+    font-size:14px; color:#222; transition:all 0.2s ease; overflow:hidden;">
     <style>
-      #copyHtmlGui * {
-        all: revert;
-        box-sizing: border-box !important;
-        font-family: system-ui, sans-serif !important;
-        font-size: 14px !important;
-        line-height: 1.4 !important;
-      }
-      #copyHtmlGui button {
-        display:block;
-        width:100%;
-        padding:8px;
-        border:none;
-        border-radius:6px;
-        cursor:pointer;
-        font-weight:600;
-        transition:filter 0.15s;
-      }
+      #copyHtmlGui * { all:revert; box-sizing:border-box!important; font-family:system-ui,sans-serif!important; font-size:14px!important; line-height:1.4!important; }
+      #copyHtmlGui button { display:block; width:100%; padding:8px; border:none; border-radius:6px; cursor:pointer; font-weight:600; transition:filter 0.15s; }
       #copyHtmlGui button:hover { filter:brightness(0.9); }
-      #copyHtmlGui #closeBtn:hover {
-        background: rgba(255,255,255,0.15);
-      }
+      #copyHtmlGui #closeBtn:hover { background:rgba(255,255,255,0.15); }
     </style>
-    <div id="headerBar" style="
-  background:#0b74de;
-  color:white;
-  padding:10px 14px 10px 12px;
-  cursor:move;
-  font-weight:bold;
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  position:relative;">
+    <div id="headerBar" style="background:#0b74de;color:white;padding:10px 14px 10px 12px;cursor:move;font-weight:bold;display:flex;justify-content:space-between;align-items:center;position:relative;">
       <span>AutoHelper</span>
-      <button id="closeBtn" title="Close" style="
-  all:unset;
-  position:absolute;
-  top:50%;
-  right:10px;
-  transform:translateY(-50%);
-  color:white;
-  font-weight:700;
-  font-size:18px;
-  cursor:pointer;
-  line-height:1;
-  width:22px;
-  height:22px;
-  text-align:center;
-  border-radius:4px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  transition:background 0.15s;">
-  ×
-</button>
+      <button id="closeBtn" title="Close" style="all:unset;position:absolute;top:50%;right:10px;transform:translateY(-50%);color:white;font-weight:700;font-size:18px;cursor:pointer;line-height:1;width:22px;height:22px;text-align:center;border-radius:4px;display:flex;align-items:center;justify-content:center;transition:background 0.15s;">×</button>
     </div>
     <div id="panelContent" style="padding:10px;">
       <label style="font-size:13px;">Target:</label><br>
@@ -165,28 +110,22 @@
         <option value="custom">✏️ Custom Selector</option>
       </select>
 
-      <input id="selectorInput" type="text" placeholder="contoh: #main .content"
-        style="width:100%;padding:5px;margin-top:6px;border:1px solid #ccc;border-radius:5px;display:none;">
+      <input id="selectorInput" type="text" placeholder="contoh: #main .content" style="width:100%;padding:5px;margin-top:6px;border:1px solid #ccc;border-radius:5px;display:none;">
 
       <label style="font-size:12px;margin-top:8px;display:block;">
-        <input type="checkbox" id="removeScriptsChk" style="margin-right:4px;">
-        Hapus semua &lt;script&gt;
+        <input type="checkbox" id="removeScriptsChk" style="margin-right:4px;">Hapus semua &lt;script&gt;
       </label>
 
       <button id="copyBtn" style="background:#0b74de;color:white;margin-top:10px;">📋 Copy HTML</button>
-
       <hr style="margin:10px 0;border:none;border-top:1px solid #ccc;">
-
       <button id="screenshotBtn" style="background:#009f4d;color:white;">📸 Screenshot (Download)</button>
-
-      <button id="copyShotBtn" style="background:#ff9800;color:white;margin-top:6px;">🖼️ Copy Screenshot to Clipboard</button>
-
+      <button id="copyShotBtn" style="background:#ff9800;color:white;margin-top:6px;">🖼️ Copy Screenshot</button>
       <div id="statusText" style="font-size:12px;margin-top:8px;color:#333;text-align:center;"></div>
     </div>
   </div>`;
   document.body.appendChild(panel);
 
-  // Tombol reopen
+  // Reopen button
   const reopenBtn = document.createElement('button');
   reopenBtn.id = 'copyHtmlReopenBtn';
   reopenBtn.textContent = '🔘 Show Panel';
@@ -218,16 +157,14 @@
   const removeScriptsChk = panel.querySelector('#removeScriptsChk');
   const closeBtn = panel.querySelector('#closeBtn');
 
-  function showStatus(msg, ms = 1800) {
+  const showStatus = (msg, ms = 1800) => {
     statusText.textContent = msg;
-    setTimeout(() => {
-      statusText.textContent = '';
-    }, ms);
-  }
+    setTimeout(() => (statusText.textContent = ''), ms);
+  };
 
-  // === Drag ===
-  (function makeDraggable() {
-    let offsetX, offsetY, dragging = false;
+  // Drag panel
+  (() => {
+    let dragging = false, offsetX, offsetY;
     headerBar.addEventListener('mousedown', e => {
       dragging = true;
       offsetX = e.clientX - panelContainer.getBoundingClientRect().left;
@@ -249,7 +186,6 @@
     }
   })();
 
-  // === Close & Reopen ===
   closeBtn.addEventListener('click', () => {
     panelContainer.style.display = 'none';
     reopenBtn.style.display = 'block';
@@ -259,22 +195,14 @@
     reopenBtn.style.display = 'none';
   });
 
-  const updateHtml = debounce(() => {
-    latestHtml = getHtmlClean();
-  }, UPDATE_DELAY);
-  const observer = new MutationObserver(updateHtml);
-  observer.observe(document.body, { childList: true, subtree: true, attributes: true, characterData: true });
+  const updateHtml = debounce(() => (latestHtml = getHtmlClean()), UPDATE_DELAY);
+  new MutationObserver(updateHtml).observe(document.body, { childList: true, subtree: true, attributes: true });
   updateHtml();
 
   presetSelect.addEventListener('change', () => {
     currentMode = presetSelect.value;
-    if (currentMode === 'custom') {
-      selectorInput.style.display = 'block';
-      targetSelector = selectorInput.value.trim() || 'body';
-    } else {
-      selectorInput.style.display = 'none';
-      targetSelector = PRESETS[currentMode];
-    }
+    selectorInput.style.display = currentMode === 'custom' ? 'block' : 'none';
+    targetSelector = currentMode === 'custom' ? selectorInput.value.trim() || 'body' : PRESETS[currentMode];
     updateHtml();
     showStatus(`Target: ${presetSelect.selectedOptions[0].text}`);
   });
@@ -303,26 +231,135 @@
       const s = document.createElement('script');
       s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
       document.body.appendChild(s);
-      await new Promise(resolve => { s.onload = () => resolve(); });
+      await new Promise(r => (s.onload = r));
     }
   }
 
+  // Screenshot with clean field overlay
   async function takeScreenshot(returnCanvas = false) {
-    await ensureHtml2Canvas();
-    panelContainer.style.display = 'none';
-    reopenBtn.style.display = 'none';
-    await new Promise(r => setTimeout(r, 100));
-    const originalScrollY = window.scrollY;
-    window.scrollTo(0, 0);
-    const canvas = await html2canvas(document.body, {
-      useCORS: true,
-      windowWidth: document.documentElement.scrollWidth,
-      windowHeight: document.documentElement.scrollHeight
+  await ensureHtml2Canvas();
+
+  // Pilih semua elemen GUI (panel, tombol reopen, style internal, iframe)
+  const guiSelectors = ['#copyHtmlGui', '#copyHtmlReopenBtn', 'style[data-autohelper-style]', 'iframe'];
+  const hiddenEls = [];
+
+  guiSelectors.forEach(sel => {
+    document.querySelectorAll(sel).forEach(el => {
+      if (el && el.style) {
+        el.dataset._autoHelperDisplay = el.style.display;
+        el.style.setProperty('display', 'none', 'important');
+        el.style.setProperty('visibility', 'hidden', 'important');
+        hiddenEls.push(el);
+      }
     });
-    window.scrollTo(0, originalScrollY);
-    panelContainer.style.display = 'block';
-    return returnCanvas ? canvas : canvas.toDataURL('image/png');
-  }
+  });
+
+  // Force reflow agar repaint selesai
+  document.body.offsetHeight;
+  await new Promise(r => setTimeout(r, 300));
+
+  // Patch untuk mencegah elemen GUI disertakan html2canvas clone()
+  const ignoreList = new Set(['copyHtmlGui', 'copyHtmlReopenBtn']);
+  const originalCloneNode = Node.prototype.cloneNode;
+  Node.prototype.cloneNode = function(deep) {
+    if (this.nodeType === 1 && ignoreList.has(this.id)) {
+      return document.createComment(`ignored ${this.id}`);
+    }
+    return originalCloneNode.call(this, deep);
+  };
+
+  // Tambahkan overlay teks pada input/select yang nilainya tidak terlihat
+  const overlays = [];
+  document.querySelectorAll('input, textarea, select').forEach(el => {
+    let val = '';
+    if (el.tagName === 'SELECT') val = el.selectedOptions[0]?.text || '';
+    else val = el.value;
+    if (!val) return;
+
+    const style = getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    const visible = style.color !== 'transparent' && el.value.trim() !== '';
+    if (visible) return;
+
+    const span = document.createElement('span');
+    span.textContent = val;
+    Object.assign(span.style, {
+      position: 'absolute',
+      left: `${window.scrollX + rect.left + 6}px`,
+      top: `${window.scrollY + rect.top + 4}px`,
+      font: style.font,
+      color: style.color,
+      background: 'transparent',
+      whiteSpace: 'pre-wrap',
+      width: `${rect.width - 10}px`,
+      lineHeight: style.lineHeight,
+      zIndex: 2147483647,
+      pointerEvents: 'none'
+    });
+    document.body.appendChild(span);
+    overlays.push(span);
+  });
+
+  // Ambil screenshot tanpa elemen GUI
+  const scrollY = window.scrollY;
+  window.scrollTo(0, 0);
+  // Hapus semua elemen <noscript> agar html2canvas tidak render fallback teks
+     document.querySelectorAll('noscript').forEach(el => el.remove());
+  //
+  document.querySelectorAll('iframe').forEach(frame => {
+  try {
+    const rect = frame.getBoundingClientRect();
+    const placeholder = document.createElement('div');
+    Object.assign(placeholder.style, {
+      position: 'absolute',
+      left: `${window.scrollX + rect.left}px`,
+      top: `${window.scrollY + rect.top}px`,
+      width: `${rect.width}px`,
+      height: `${rect.height}px`,
+      background: '#fff url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAoMBgCkHrO0AAAAASUVORK5CYII=") center/contain no-repeat',
+      border: '1px solid #ccc',
+      zIndex: 2147483647
+    });
+    placeholder.dataset.autohelperIgnore = 'true';
+    document.body.appendChild(placeholder);
+    frame.dataset._autohelperPlaceholder = 'true';
+  } catch {}
+});
+
+  const canvas = await html2canvas(document.body, {
+    useCORS: true,
+    scale: 2,
+    scrollX: -window.scrollX,
+    scrollY: -window.scrollY,
+    windowWidth: document.documentElement.scrollWidth,
+    windowHeight: document.documentElement.scrollHeight,
+    backgroundColor: null,
+    foreignObjectRendering: true,
+    ignoreElements: el =>
+      el?.id === 'copyHtmlGui' ||
+      el?.id === 'copyHtmlReopenBtn' ||
+      el?.tagName === 'IFRAME' ||
+      el?.dataset?.autohelperIgnore === 'true'
+  });
+  window.scrollTo(0, scrollY);
+
+  // Bersihkan overlay dan restore GUI
+  overlays.forEach(e => e.remove());
+  hiddenEls.forEach(el => {
+    el.style.display = el.dataset._autoHelperDisplay || '';
+    el.style.visibility = '';
+    delete el.dataset._autoHelperDisplay;
+  });
+  Node.prototype.cloneNode = originalCloneNode;
+
+  return returnCanvas ? canvas : canvas.toDataURL('image/png');
+}
+
+
+
+
+
+
 
   screenshotBtn.addEventListener('click', async () => {
     showStatus('📸 Mengambil screenshot...');
